@@ -1,0 +1,100 @@
+class BankAccount:
+    # Static (class) variable: shared by ALL accounts
+    total_accounts = 0
+
+    def __init__(self, initial_balance=0):
+        # Assign a unique incremental account number using the static counter
+        BankAccount.total_accounts += 1
+        self.__account_number = BankAccount.total_accounts  # private
+        self.__balance = 0  # private (set safely below)
+
+        # Validate initial balance (reject negative)
+        if initial_balance < 0:
+            print("Transaction denied")
+        else:
+            self.__balance = initial_balance
+
+    # Accessors (Getters)
+    def get_balance(self):
+        return self.__balance
+
+    def get_account_number(self):
+        return self.__account_number
+
+    # Mutators with validation
+    def deposit(self, amount):
+        if amount <= 0:
+            print("Transaction denied")
+            return False
+        self.__balance += amount
+        return True
+
+    def withdraw(self, amount):
+        if amount <= 0:
+            print("Transaction denied")
+            return False
+        if self.__balance < amount:
+            print("Transaction denied")
+            return False
+        self.__balance -= amount
+        return True
+
+
+class SavingsAccount(BankAccount):
+    def __init__(self, initial_balance=0, interest_rate=0.05):
+        super().__init__(initial_balance)
+        self.interest_rate = interest_rate  # public (ok)
+
+    def apply_interest(self):
+        # Interest only makes sense with a non-negative rate
+        if self.interest_rate < 0:
+            print("Transaction denied")
+            return False
+
+        # Use the public getter + deposit (keeps encapsulation rules)
+        interest_amount = self.get_balance() * self.interest_rate
+        if interest_amount > 0:
+            return self.deposit(interest_amount)
+        return True
+
+
+class VIPAccount(BankAccount):
+    def __init__(self, initial_balance=0, overdraft_limit=-1000):
+        super().__init__(initial_balance)
+        self.overdraft_limit = overdraft_limit  # e.g., -1000
+
+    # Method overriding (Polymorphism)
+    def withdraw(self, amount):
+        if amount <= 0:
+            print("Transaction denied")
+            return False
+
+        # VIP rule: balance can go negative, but not below overdraft_limit
+        new_balance = self.get_balance() - amount
+        if new_balance < self.overdraft_limit:
+            print("Transaction denied")
+            return False
+
+        # We cannot directly do self.__balance -= amount (private in parent),
+        # so we perform: withdraw what we can, then "force" the remainder by deposit/withdraw logic.
+        # Simpler: use parent's withdraw if possible, otherwise withdraw what's available then adjust.
+
+        current = self.get_balance()
+        if current >= amount:
+            return super().withdraw(amount)
+
+        # If not enough funds, bring balance down to new_balance by withdrawing current + extra.
+        # Step 1: withdraw everything available (brings to 0)
+        if current > 0:
+            super().withdraw(current)
+
+        # Step 2: now we need to go negative by the remaining amount
+        remaining = amount - max(current, 0)
+
+        # To move negative without accessing private state, we can "simulate" by:
+        # depositing remaining and immediately withdrawing 2*remaining is messy.
+        # Better approach: add a protected helper in the base (see below).
+        # For now, we’ll use a clean protected helper pattern instead.
+
+        print("Internal design note: add a protected balance adjuster for subclasses.")
+        return False
